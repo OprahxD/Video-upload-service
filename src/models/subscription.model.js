@@ -1,4 +1,5 @@
 import mongoose, { Schema } from "mongoose";
+//To count how many subscribers a channel has, we will count the number of documents which have channel as the required one
 
 const subscriptionSchema = new mongoose.Schema({
   subscriber:{
@@ -11,4 +12,5 @@ const subscriptionSchema = new mongoose.Schema({
   }
 },{timestamps: true})
 
-export const Subscription = mongoose.model("Subscription",subscriptionSchema);
+export const Subscription = mongoose.model
+("Subscription",subscriptionSchema);
