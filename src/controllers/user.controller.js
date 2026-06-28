@@ -32,10 +32,10 @@ const registerUser = asyncHandler(async (req, res) => {
   //check whether user is created successfully or not
   //return response to front-end with user details 
 
-  console.log("--- registerUser Debug Info ---");
-  console.log("req.body:", req.body);
-  console.log("req.files:", req.files);
-  console.log("--------------------------------");
+  // console.log("--- registerUser Debug Info ---");
+  // console.log("req.body:", req.body);
+  // console.log("req.files:", req.files);
+  // console.log("--------------------------------");
 
   const { email, username, password, fullName } = req.body || {};
   // console.log("User details from front-end",fullName,email,username,password);
@@ -159,7 +159,7 @@ const logoutUser = asyncHandler(async (req, res) => {
     req.user._id,
     {
       $unset: {
-        refreshToken: 1
+        refreshToken: 1 //this removes the field from the document
       }
     }, {
     new: true
