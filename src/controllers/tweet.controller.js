@@ -19,7 +19,7 @@ const createTweet = asyncHandler(async (req, res) => {
 
     const userId = req.user?._id;
 
-    const tweet = new Tweet.create({
+    const tweet = Tweet.create({
         content,
         owner: userId
     });
@@ -81,7 +81,7 @@ const getUserTweets = asyncHandler(async (req, res) => {
                     $first: "$authorDetails"
                 },
                 likesCount: {
-                    $size: "tweetLikes"
+                    $size: "$tweetLikes"
                 }
             }
         },
@@ -124,7 +124,7 @@ const updateTweet = asyncHandler(async (req, res) => {
         throw new ApiError(400,"The user is not logged in");
     }
 
-    const tweetId = req.params;
+    const {tweetId} = req.params;
 
     if(!isValidObjectId(tweetId)){
         throw new ApiError(400,"Invalid tweet ID format");
@@ -171,12 +171,8 @@ const deleteTweet = asyncHandler(async (req, res) => {
         throw new ApiError(400,"The user is not logged in");
     }
 
-    const userId = req.user?._id;
-    if(!userId){
-        throw new ApiError(400,"The user is not logged in");
-    }
 
-    const tweetId = req.params;
+    const {tweetId} = req.params;
 
     if(!isValidObjectId(tweetId)){
         throw new ApiError(400,"Invalid tweet ID format");
