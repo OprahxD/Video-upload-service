@@ -19,6 +19,10 @@ const createTweet = asyncHandler(async (req, res) => {
 
     const userId = req.user?._id;
 
+    if(!isValidObjectId(userId)){
+        throw new ApiError(400, "You need to be logged in to tweet");
+    }
+
     const tweet = Tweet.create({
         content,
         owner: userId
@@ -29,9 +33,9 @@ const createTweet = asyncHandler(async (req, res) => {
     }
 
     return res
-    .status(200)
+    .status(201)
     .json(
-        new ApiResponse(200,tweet,"Tweet was created successfully")
+        new ApiResponse(201,tweet,"Tweet was created successfully")
     )
 
 })
@@ -120,7 +124,7 @@ const updateTweet = asyncHandler(async (req, res) => {
     }
 
     const userId = req.user?._id;
-    if(!userId){
+    if(isValidObjectId(userId)){
         throw new ApiError(400,"The user is not logged in");
     }
 
@@ -167,7 +171,7 @@ const deleteTweet = asyncHandler(async (req, res) => {
     //TODO: delete tweet
     const userId = req.user?._id;
     
-    if(!userId){
+    if(!isValidObjectId(userId)){
         throw new ApiError(400,"The user is not logged in");
     }
 
