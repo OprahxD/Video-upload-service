@@ -143,14 +143,15 @@ const getLikedVideos = asyncHandler(async (req, res) => {
     //TODO: get all liked videos
     const userId = req.user?._id;
 
-    if(!userId){
+    if(!isValidObjectId(userId)){
         throw new ApiError(400,"The user is not logged in");
     }
 
     const likedVideos = await Like.aggregate([
         {
             $match: {
-                owner: new mongoose.Types.ObjectId(userId)
+                likedBy: new mongoose.Types.ObjectId(userId),
+                video: { $exists: true, $ne: null }
             }
         },
         {

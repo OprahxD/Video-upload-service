@@ -15,7 +15,7 @@ const getVideoComments = asyncHandler(async (req, res) => {
     const pageNum = parseInt(page,10);
     const limitNum = parseInt(limit,10);
     const skipNum = (pageNum-1)*limitNum;
-    const videoComments = Comment.aggregate([
+    const videoComments = await Comment.aggregate([
         {
             $match: {
                 video: new mongoose.Types.ObjectId(videoId)
@@ -42,7 +42,7 @@ const getVideoComments = asyncHandler(async (req, res) => {
             }
         },
         {
-            $unwind: $ownerDetails
+            $unwind: "$ownerDetails"
         },
         {   
             $project: {
@@ -77,7 +77,11 @@ const addComment = asyncHandler(async (req, res) => {
     const {videoId} = req.params;
 
     if(!isValidObjectId(videoId)){
-        throw new ApiError(400, "Couldn't Find the video you are looking for");
+        throw new ApiError(400, "Couldn't Find the video you are looking for", [
+            `Received videoId: '${videoId}'`,
+            `Length: ${videoId ? videoId.length : 0}`,
+            `Is Valid: ${isValidObjectId(videoId)}`
+        ]);
     }
 
     const userId = req.user?._id;

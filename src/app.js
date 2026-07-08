@@ -39,4 +39,18 @@ app.use("/api/v1/dashboard", dashboardRouter)
 
 // http://localhost:8000/api/v1/users/register
 
+// Global Error Handler
+app.use((err, req, res, next) => {
+    let statusCode = err.statusCode || 500;
+    let message = err.message || "Internal Server Error";
+    let errors = err.errors || [];
+
+    return res.status(statusCode).json({
+        success: false,
+        message: message,
+        errors: errors,
+        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+});
+
 export { app }
