@@ -27,8 +27,8 @@ const getAllVideos = asyncHandler(async (req, res) => {
 
     if(query){
         matchConditions.$or = [
-            {title: {regex: query,$options: "i"}},
-            {description: {regex: query,$options: "i"}}
+            {title: {$regex: query, $options: "i"}},
+            {description: {$regex: query, $options: "i"}}
         ]
     }
 
