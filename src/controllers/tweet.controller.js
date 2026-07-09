@@ -23,7 +23,7 @@ const createTweet = asyncHandler(async (req, res) => {
         throw new ApiError(400, "You need to be logged in to tweet");
     }
 
-    const tweet = Tweet.create({
+    const tweet = await Tweet.create({
         content,
         owner: userId
     });
@@ -124,7 +124,7 @@ const updateTweet = asyncHandler(async (req, res) => {
     }
 
     const userId = req.user?._id;
-    if(isValidObjectId(userId)){
+    if(!isValidObjectId(userId)){
         throw new ApiError(400,"The user is not logged in");
     }
 
@@ -201,9 +201,80 @@ const deleteTweet = asyncHandler(async (req, res) => {
     )
 })
 
+const getAllTweets = asyncHandler(async (req, res) => {
+    const { page = 1, limit = 10 } = req.query;
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+    const skipNum = (pageNum - 1) * limitNum;
+
+    const userId = req.user?._id;
+
+    const tweets = await Tweet.aggregate([
+        {
+            $sort: { createdAt: -1 }
+        },
+        {
+            $skip: skipNum
+        },
+        {
+            $limit: limitNum
+        },
+        {
+            $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "authorDetails"
+            }
+        },
+        {
+            $unwind: "$authorDetails"
+        },
+        {
+            $lookup: {
+                from: "likes",
+                localField: "_id",
+                foreignField: "tweet",
+                as: "tweetLikes"
+            }
+        },
+        {
+            $addFields: {
+                author: {
+                    _id: "$authorDetails._id",
+                    username: "$authorDetails.username",
+                    fullName: "$authorDetails.fullName",
+                    avatar: "$authorDetails.avatar"
+                },
+                likesCount: { $size: "$tweetLikes" },
+                isLiked: {
+                    $cond: {
+                        if: { $in: [new mongoose.Types.ObjectId(userId), "$tweetLikes.likedBy"] },
+                        then: true,
+                        else: false
+                    }
+                }
+            }
+        },
+        {
+            $project: {
+                _id: 1,
+                content: 1,
+                createdAt: 1,
+                author: 1,
+                likesCount: 1,
+                isLiked: 1
+            }
+        }
+    ]);
+
+    return res.status(200).json(new ApiResponse(200, tweets, "Tweets fetched successfully"));
+});
+
 export {
     createTweet,
     getUserTweets,
     updateTweet,
-    deleteTweet
+    deleteTweet,
+    getAllTweets
 }

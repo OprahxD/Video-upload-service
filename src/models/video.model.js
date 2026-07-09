@@ -4,11 +4,16 @@ import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2';
 const videoSchema = new mongoose.Schema({
   videoFile: {
     type: String, //cloudinary url
-    required: true
+    required: false
   },
   thumbnail: {
     type: String, //cloudinary url
-    required: true
+    required: false
+  },
+  uploadStatus: {
+    type: String,
+    enum: ["processing", "completed", "failed"],
+    default: "processing"
   },
   title: {
     type: String, 
@@ -20,7 +25,7 @@ const videoSchema = new mongoose.Schema({
   },
   duration: {
     type: Number,
-    required: true
+    default: 0
   },
   views: {
     type: Number,

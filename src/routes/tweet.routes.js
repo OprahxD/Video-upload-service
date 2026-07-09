@@ -4,15 +4,16 @@ import {
     deleteTweet,
     getUserTweets,
     updateTweet,
+    getAllTweets
 } from "../controllers/tweet.controller.js"
-import {verifyJWT} from "../middlewares/auth.middleware.js"
+import {verifyJWT, optionallyVerifyJWT} from "../middlewares/auth.middleware.js"
 
 const router = Router();
-router.use(verifyJWT); // Apply verifyJWT middleware to all routes in this file
 
-router.route("/createTweet").post(createTweet);
-router.route("/user/:userId").get(getUserTweets);
-router.route("/:tweetId").patch(updateTweet).delete(deleteTweet);
+router.route("/").get(optionallyVerifyJWT, getAllTweets);
+router.route("/createTweet").post(verifyJWT, createTweet);
+router.route("/user/:userId").get(optionallyVerifyJWT, getUserTweets);
+router.route("/:tweetId").patch(verifyJWT, updateTweet).delete(verifyJWT, deleteTweet);
 
 
 export default router

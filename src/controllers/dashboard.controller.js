@@ -5,13 +5,20 @@ import { Like } from "../models/like.model.js"
 import { ApiError } from "../utils/ApiError.js"
 import { ApiResponse } from "../utils/ApiResponse.js"
 import { asyncHandler } from "../utils/asyncHandler.js"
+import { redis } from "../db/redis.js"
 
 const getChannelStats = asyncHandler(async (req, res) => {
-    // TODO: Get the channel stats like total video views, total subscribers, total videos, total likes etc.
     const channelId = req.user?._id;
 
     if (!isValidObjectId(channelId)) {
         throw new ApiError(400, "Invalid channel ID");
+    }
+
+    const redisKey = `channelStats:${channelId}`;
+    const cachedStats = await redis.get(redisKey);
+
+    if (cachedStats) {
+        return res.status(200).json(new ApiResponse(200, JSON.parse(cachedStats), "Channel stats fetched successfully from cache"));
     }
 
     const videoStats = await Video.aggregate([
@@ -33,9 +40,15 @@ const getChannelStats = asyncHandler(async (req, res) => {
                 as: "videoDetails"
             }
         },
-        { $unwind: "$videoDetails" },
-        { $match: { "videoDetails.owner": new mongoose.Types.ObjectId(channelId) } },
-        { $group: { _id: null, totalLikes: { $sum: 1 } } }
+        {
+             $unwind: "$videoDetails" 
+        },
+        {
+             $match: { "videoDetails.owner": new mongoose.Types.ObjectId(channelId) } 
+        },
+        {
+             $group: { _id: null, totalLikes: { $sum: 1 } } 
+        }
     ]);
 
     const stats = {
@@ -44,6 +57,9 @@ const getChannelStats = asyncHandler(async (req, res) => {
         totalSubscribers: subscriberStats[0]?.totalSubscribers || 0,
         totalLikes: likesStats[0]?.totalLikes || 0
     };
+
+    // Cache the result for 5 minutes (300 seconds)
+    await redis.setex(redisKey, 300, JSON.stringify(stats));
 
     return res.status(200).json(new ApiResponse(200, stats, "Channel stats fetched successfully"));
 })

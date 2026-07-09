@@ -15,6 +15,9 @@ const getVideoComments = asyncHandler(async (req, res) => {
     const pageNum = parseInt(page,10);
     const limitNum = parseInt(limit,10);
     const skipNum = (pageNum-1)*limitNum;
+
+    const userId = req.user?._id;
+
     const videoComments = await Comment.aggregate([
         {
             $match: {
@@ -44,6 +47,26 @@ const getVideoComments = asyncHandler(async (req, res) => {
         {
             $unwind: "$ownerDetails"
         },
+        {
+            $lookup: {
+                from: "likes",
+                localField: "_id",
+                foreignField: "comment",
+                as: "likes"
+            }
+        },
+        {
+            $addFields: {
+                likesCount: { $size: "$likes" },
+                isLiked: {
+                    $cond: {
+                        if: { $in: [new mongoose.Types.ObjectId(userId), "$likes.likedBy"] },
+                        then: true,
+                        else: false
+                    }
+                }
+            }
+        },
         {   
             $project: {
                 _id: 1,
@@ -54,7 +77,9 @@ const getVideoComments = asyncHandler(async (req, res) => {
                     username: "$ownerDetails.username",
                     avatar: "$ownerDetails.avatar",
                     fullName: "$ownerDetails.fullName"
-                }
+                },
+                likesCount: 1,
+                isLiked: 1
             }
         }
     ]);

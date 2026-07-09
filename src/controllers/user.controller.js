@@ -2,8 +2,13 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 import { User } from '../models/user.model.js';
 import { uploadOnCloudinary } from '../utils/cloudinary.js'
+import fs from 'fs';
 import { ApiResponse } from '../utils/ApiResponse.js';
+import { redis } from "../db/redis.js";
 import jwt from "jsonwebtoken";
+import { OAuth2Client } from 'google-auth-library';
+
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const generateAccessAndRefreshTokens = async (userId) => {
   try {
@@ -38,17 +43,46 @@ const registerUser = asyncHandler(async (req, res) => {
   // console.log("--------------------------------");
 
   const { email, username, password, fullName } = req.body || {};
-  // console.log("User details from front-end",fullName,email,username,password);
 
   if (
     [fullName, email, username, password].some((field) => !field || field.trim() === "")
   ) {
-    throw new ApiError(400, "All fields are required", [
-      `Missing fields. Received: fullName='${fullName}', email='${email}', username='${username}', password='${password}'. ` +
-      `Content-Type: '${req.headers['content-type']}'. ` +
-      `Body keys received: [${Object.keys(req.body || {}).join(", ")}]. ` +
-      `Query params received: [${Object.keys(req.query || {}).join(", ")}].`
-    ])
+    throw new ApiError(400, "All fields are required");
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    const avatarLocalPath = req.files?.avatar?.[0]?.path;
+    const coverImageLocalPath = req.files?.coverImage && req.files.coverImage.length > 0
+      ? req.files.coverImage[0].path
+      : "";
+    if (avatarLocalPath) fs.unlinkSync(avatarLocalPath);
+    if (coverImageLocalPath) fs.unlinkSync(coverImageLocalPath);
+    throw new ApiError(400, "Invalid email format");
+  }
+
+  const avatarFile = req.files?.avatar?.[0];
+  const avatarLocalPath = avatarFile?.path;
+
+  if (!avatarLocalPath) {
+    throw new ApiError(400, "Avatar file is required");
+  }
+
+  const coverImageLocalPath = req.files?.coverImage && req.files.coverImage.length > 0
+    ? req.files.coverImage[0].path
+    : "";
+
+  if (avatarFile && !avatarFile.mimetype.startsWith("image/")) {
+    if (avatarLocalPath) fs.unlinkSync(avatarLocalPath);
+    if (coverImageLocalPath) fs.unlinkSync(coverImageLocalPath);
+    throw new ApiError(400, "Avatar file must be an image");
+  }
+
+  const coverImageFile = req.files?.coverImage?.[0];
+  if (coverImageFile && !coverImageFile.mimetype.startsWith("image/")) {
+    if (avatarLocalPath) fs.unlinkSync(avatarLocalPath);
+    if (coverImageLocalPath) fs.unlinkSync(coverImageLocalPath);
+    throw new ApiError(400, "Cover image file must be an image");
   }
 
   const existedUser = await User.findOne({
@@ -59,17 +93,9 @@ const registerUser = asyncHandler(async (req, res) => {
   })
 
   if (existedUser) {
-    throw new ApiError(409, "User with email or username already exists", ["email, username are taken"])
-  }
-  console.log(existedUser);
-
-  const avatarLocalPath = req.files?.avatar?.[0]?.path;
-  const coverImageLocalPath = req.files?.coverImage && req.files.coverImage.length > 0
-    ? req.files.coverImage[0].path
-    : "";
-
-  if (!avatarLocalPath) {
-    throw new ApiError(400, "Avatar file is required", ["avatar file is missing"])
+    if (avatarLocalPath) fs.unlinkSync(avatarLocalPath);
+    if (coverImageLocalPath) fs.unlinkSync(coverImageLocalPath);
+    throw new ApiError(409, "User with email or username already exists");
   }
 
   const avatar = await uploadOnCloudinary(avatarLocalPath);
@@ -135,7 +161,7 @@ const loginUser = asyncHandler(async (req, res) => {
 
   const options = {
     httpOnly: true,
-    secure: true
+    secure: process.env.NODE_ENV === "production"
   }
 
   return res
@@ -154,6 +180,74 @@ const loginUser = asyncHandler(async (req, res) => {
 
 })
 
+const googleLogin = asyncHandler(async (req, res) => {
+    const { token } = req.body;
+
+    if (!token) {
+        throw new ApiError(400, "Google token is missing");
+    }
+
+    try {
+        const ticket = await client.verifyIdToken({
+            idToken: token,
+            audience: process.env.GOOGLE_CLIENT_ID,
+        });
+
+        const payload = ticket.getPayload();
+        const { email, name, picture } = payload; 
+
+        // Check if user already exists
+        let user = await User.findOne({ email });
+
+        if (!user) {
+            // Create a new user if they don't exist
+            const baseUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+            let username = baseUsername;
+            let counter = 1;
+            
+            // Ensure username uniqueness
+            while (await User.findOne({ username })) {
+                username = `${baseUsername}${counter}`;
+                counter++;
+            }
+
+            user = await User.create({
+                fullName: username,
+                email: email,
+                username: username,
+                avatar: picture,
+                password: Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8), 
+            });
+        }
+
+        const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user._id);
+
+        const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
+
+        const options = {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production"
+        };
+
+        return res
+            .status(200)
+            .cookie("accessToken", accessToken, options)
+            .cookie("refreshToken", refreshToken, options)
+            .json(
+                new ApiResponse(
+                    200,
+                    {
+                        user: loggedInUser, accessToken, refreshToken
+                    },
+                    "User logged in successfully with Google"
+                )
+            );
+    } catch (error) {
+        console.error("Google Login Error: ", error);
+        throw new ApiError(401, "Invalid Google token");
+    }
+});
+
 const logoutUser = asyncHandler(async (req, res) => {
   await User.findByIdAndUpdate(
     req.user._id,
@@ -168,7 +262,7 @@ const logoutUser = asyncHandler(async (req, res) => {
 
   const options = {
     httpOnly: true,
-    secure: true
+    secure: process.env.NODE_ENV === "production"
   }
 
 
@@ -206,7 +300,7 @@ const refreshAccessToken = asyncHandler(async(req,res)=>{
   
     const options = {
       httpOnly:true,
-      secure: true
+      secure: process.env.NODE_ENV === "production"
     }
   
     const {accessToken,newrefreshToken} = await generateAccessAndRefreshTokens(user._id);
@@ -257,6 +351,14 @@ const updateAccountDetails = asyncHandler(async(req,res)=>{
   if(!fullName && !email){
     throw new ApiError(400, "All fields are required");
   }
+
+  if (email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new ApiError(400, "Invalid email format");
+    }
+  }
+
   const user = await User.findByIdAndUpdate(
     req.user?._id,
     {
@@ -278,6 +380,11 @@ const updateUserAvatar = asyncHandler(async(req,res)=>{
   const avatarLocalPath = req.file?.path;
   if(!avatarLocalPath){
     throw new ApiError(400,"Avatar is missing");
+  }
+
+  if (req.file && !req.file.mimetype.startsWith("image/")) {
+    fs.unlinkSync(avatarLocalPath);
+    throw new ApiError(400, "Avatar file must be an image");
   }
 
   const avatar = await uploadOnCloudinary(avatarLocalPath);
@@ -342,6 +449,15 @@ const getUserChannelProfile = asyncHandler(async(req,res)=>{
     throw new ApiError(400,"Username is missing");
   }
 
+  const redisKey = `userProfile:${username.toLowerCase()}`;
+  const cachedProfile = await redis.get(redisKey);
+
+  if (cachedProfile) {
+    return res.status(200).json(
+      new ApiResponse(200, JSON.parse(cachedProfile), "User channel fetched successfully from cache")
+    );
+  }
+
   const channel = await User.aggregate([
     {
       $match: {
@@ -365,6 +481,22 @@ const getUserChannelProfile = asyncHandler(async(req,res)=>{
       }
     },
     {
+      $lookup: {
+        from: "videos",
+        localField: "_id",
+        foreignField: "owner",
+        as: "videos"
+      }
+    },
+    {
+      $lookup: {
+        from: "likes",
+        localField: "videos._id",
+        foreignField: "video",
+        as: "likes"
+      }
+    },
+    {
       $addFields: {
         subscribersCount: {
           $size: "$subscribers"
@@ -378,6 +510,15 @@ const getUserChannelProfile = asyncHandler(async(req,res)=>{
             then: true,
             else: false
           }
+        },
+        totalVideos: {
+          $size: "$videos"
+        },
+        totalViews: {
+          $sum: "$videos.views"
+        },
+        totalLikes: {
+          $size: "$likes"
         }
       }
     },
@@ -391,9 +532,9 @@ const getUserChannelProfile = asyncHandler(async(req,res)=>{
         avatar: 1,
         coverImage: 1,
         email: 1,
-        
-
-
+        totalVideos: 1,
+        totalViews: 1,
+        totalLikes: 1
       }
     }
   ])
@@ -401,6 +542,9 @@ const getUserChannelProfile = asyncHandler(async(req,res)=>{
   if(!channel?.length){
     throw new ApiError(404,"Channel does not exist");
   }
+
+  // Cache the profile for 5 minutes (300 seconds)
+  await redis.setex(redisKey, 300, JSON.stringify(channel[0]));
 
   return res
   .status(200)
@@ -417,37 +561,59 @@ const getWatchHistory = asyncHandler(async(req,res)=>{
       }
     },
     {
+      $addFields: {
+        watchHistory: {
+          $map: {
+            input: { $ifNull: ["$watchHistory", []] },
+            as: "vh",
+            in: { $toObjectId: "$$vh" }
+          }
+        }
+      }
+    },
+    {
       $lookup: {
         from: "videos",
-        localField: "watchHistory",
-        foreignField: "_id",
-        as: "watchHistory",
+        let: { history_ids: "$watchHistory" },
         pipeline: [
+          {
+            $match: {
+              $expr: { $in: ["$_id", "$$history_ids"] }
+            }
+          },
           {
             $lookup: {
               from: "users",
               localField: "owner",
               foreignField: "_id",
-              as: "owner",
-              pipeline: [
-                {
-                  $project: {
-                    fullName: 1,
-                    username: 1,
-                    avatar: 1
-                  }
-                }
-              ]
+              as: "ownerDetails"
             }
           },
           {
             $addFields: {
+              owner: { $first: "$ownerDetails" }
+            }
+          },
+          {
+            $project: {
+              _id: 1,
+              videoFile: 1,
+              thumbnail: 1,
+              title: 1,
+              description: 1,
+              duration: 1,
+              views: 1,
+              createdAt: 1,
               owner: {
-                $first: "$owner"
+                _id: "$owner._id",
+                username: "$owner.username",
+                fullName: "$owner.fullName",
+                avatar: "$owner.avatar"
               }
             }
           }
-        ]
+        ],
+        as: "watchHistory"
       }
     }
   ])
@@ -466,6 +632,7 @@ const getWatchHistory = asyncHandler(async(req,res)=>{
 export {
   registerUser,
   loginUser,
+  googleLogin,
   logoutUser,
   refreshAccessToken,
   changeCurrentPassword,
