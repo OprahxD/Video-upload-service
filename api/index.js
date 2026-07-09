@@ -6,16 +6,11 @@ dotenv.config({
     path: './.env'
 });
 
-let isConnected = false;
+// Connect to DB once during cold start using top-level await
+try {
+    await connectDB();
+} catch (error) {
+    console.error("DB connection error in serverless entry:", error);
+}
 
-export default async (req, res) => {
-    if (!isConnected) {
-        try {
-            await connectDB();
-            isConnected = true;
-        } catch (error) {
-            console.error("DB connection error in serverless entry:", error);
-        }
-    }
-    return app(req, res);
-};
+export default app;
