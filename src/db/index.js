@@ -3,6 +3,7 @@ import { DB_NAME } from "../constants.js";
 
 const connectDB = async ()=>{
   try{
+    mongoose.set('bufferCommands', false); // Disable buffering so queries fail fast if DB is down
     const connectionInstance = await mongoose.connect(`${process.env.MONGODB_URI}/${DB_NAME}`, {
       serverSelectionTimeoutMS: 5000 // Fails fast in 5 seconds if IP is not whitelisted
     });
