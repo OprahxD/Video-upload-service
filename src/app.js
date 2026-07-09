@@ -6,7 +6,14 @@ import { globalLimiter } from "./middlewares/rateLimiter.middleware.js"
 const app = express()
 
 app.use(cors({
-    origin: process.env.CORS_ORIGIN,
+    origin: process.env.CORS_ORIGIN === '*' ? '*' : (origin, callback) => {
+        const envOrigin = process.env.CORS_ORIGIN?.replace(/\/$/, ''); // Remove accidental trailing slashes
+        if (!origin || origin === envOrigin || origin.startsWith('http://localhost') || (origin && origin.includes('vercel.app'))) {
+            callback(null, origin); // Dynamically reflect allowed origin back
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true
 }))
 
