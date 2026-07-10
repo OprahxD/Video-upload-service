@@ -161,7 +161,8 @@ const loginUser = asyncHandler(async (req, res) => {
 
   const options = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production"
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax"
   }
 
   return res
@@ -226,7 +227,8 @@ const googleLogin = asyncHandler(async (req, res) => {
 
         const options = {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production"
+            secure: process.env.NODE_ENV === "production",
+            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax"
         };
 
         return res
@@ -262,7 +264,8 @@ const logoutUser = asyncHandler(async (req, res) => {
 
   const options = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production"
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax"
   }
 
 
@@ -299,16 +302,17 @@ const refreshAccessToken = asyncHandler(async(req,res)=>{
     }
   
     const options = {
-      httpOnly:true,
-      secure: process.env.NODE_ENV === "production"
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax"
     }
   
     const {accessToken,newrefreshToken} = await generateAccessAndRefreshTokens(user._id);
   
     return res
     .status(200)
-    .cookie("accessToken", accessToken)
-    .cookie("refreshToken", newrefreshToken)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", newrefreshToken, options)
     .json(
       new ApiError(
         200,
