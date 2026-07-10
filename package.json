@@ -20,7 +20,6 @@
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
-    "bullmq": "^5.79.3",
     "cloudinary": "^2.10.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
@@ -32,7 +31,6 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.7.0",
     "mongoose-aggregate-paginate-v2": "^1.1.4",
-    "multer": "^2.2.0",
-    "rate-limit-redis": "^5.0.0"
+    "multer": "^2.2.0"
   }
 }

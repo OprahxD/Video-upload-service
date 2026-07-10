@@ -1,30 +1,22 @@
+import { Redis } from "ioredis";
+
 let redisClient = null;
 
-const isVercel = !!process.env.VERCEL;
+if (process.env.REDIS_URL) {
+    redisClient = new Redis(process.env.REDIS_URL, {
+        maxRetriesPerRequest: null,
+        enableOfflineQueue: false,  // Don't queue commands when offline (fail fast)
+        connectTimeout: 5000,       // Timeout connection attempts in 5 seconds
+        lazyConnect: !!process.env.VERCEL, // On Vercel, connect lazily on first use instead of immediately
+    });
 
-if (!isVercel && process.env.REDIS_URL) {
-    // Only import ioredis on non-Vercel environments to prevent serverless crashes
-    try {
-        const { Redis } = await import("ioredis");
-        redisClient = new Redis(process.env.REDIS_URL, {
-            maxRetriesPerRequest: null, // Required by BullMQ
-            enableOfflineQueue: false,  // Don't queue commands when offline (fail fast)
-            connectTimeout: 5000,       // Timeout connection attempts in 5 seconds
-        });
+    redisClient.on("connect", () => {
+        console.log("☁️ Successfully connected to Redis!");
+    });
 
-        redisClient.on("connect", () => {
-            console.log("☁️ Successfully connected to Redis!");
-        });
-
-        redisClient.on("error", (err) => {
-            console.error("❌ Redis connection failed:", err.message);
-        });
-    } catch (err) {
-        console.error("⚠️ Failed to initialize Redis:", err.message);
-        redisClient = null;
-    }
-} else if (isVercel) {
-    console.warn("⚠️ Vercel detected — Redis/ioredis disabled for serverless compatibility.");
+    redisClient.on("error", (err) => {
+        console.error("❌ Redis connection failed:", err.message);
+    });
 } else {
     console.warn("⚠️ REDIS_URL is not defined in .env - Redis features will be disabled.");
 }
@@ -34,6 +26,7 @@ const redis = {
     get: async (key) => {
         try {
             if (!redisClient) return null;
+            if (redisClient.status === "wait") await redisClient.connect();
             return await redisClient.get(key);
         } catch (err) {
             console.error("Redis GET error:", err.message);
@@ -43,6 +36,7 @@ const redis = {
     setex: async (key, seconds, value) => {
         try {
             if (!redisClient) return null;
+            if (redisClient.status === "wait") await redisClient.connect();
             return await redisClient.setex(key, seconds, value);
         } catch (err) {
             console.error("Redis SETEX error:", err.message);
@@ -52,6 +46,7 @@ const redis = {
     zincrby: async (key, increment, member) => {
         try {
             if (!redisClient) return 0;
+            if (redisClient.status === "wait") await redisClient.connect();
             return await redisClient.zincrby(key, increment, member);
         } catch (err) {
             console.error("Redis ZINCRBY error:", err.message);
@@ -61,6 +56,7 @@ const redis = {
     zrevrange: async (key, start, stop) => {
         try {
             if (!redisClient) return [];
+            if (redisClient.status === "wait") await redisClient.connect();
             return await redisClient.zrevrange(key, start, stop);
         } catch (err) {
             console.error("Redis ZREVRANGE error:", err.message);
