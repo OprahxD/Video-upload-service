@@ -6,14 +6,41 @@ import fs from "fs";
 
 export let uploadQueue;
 
-if (redisClient) {
+if (redisClient && !process.env.VERCEL) {
     uploadQueue = new Queue("video-uploads", { connection: redisClient });
 } else {
-    console.warn("⚠️ Redis is disabled. uploadQueue is running in mock mode.");
+    console.warn("⚠️ Vercel/Mock mode active. BullMQ is disabled to prevent serverless timeouts.");
     uploadQueue = {
         add: async (name, data) => {
-            console.warn(`⚠️ Redis is disabled. Job '${name}' was not queued.`);
-            return { id: "mock-job-id" };
+            console.log(`[MockQueue] Running job '${name}' synchronously...`);
+            const { videoId, localVideoPath, localThumbnailPath } = data;
+            try {
+                // Upload to Cloudinary
+                const videoLink = await uploadOnCloudinary(localVideoPath);
+                const thumbnailLink = await uploadOnCloudinary(localThumbnailPath);
+
+                if (!videoLink?.url || !thumbnailLink?.url) {
+                    throw new Error("Failed to upload to Cloudinary");
+                }
+
+                // Update Database
+                await Video.findByIdAndUpdate(videoId, {
+                    videoFile: videoLink.url,
+                    thumbnail: thumbnailLink.url,
+                    duration: videoLink.duration || 0,
+                    uploadStatus: "completed",
+                    isPublished: true,
+                });
+                console.log(`[MockQueue] Successfully processed Video ID: ${videoId}`);
+            } catch (error) {
+                console.error(`[MockQueue] Failed processing Video ID: ${videoId}`, error);
+                await Video.findByIdAndUpdate(videoId, { uploadStatus: "failed" });
+            } finally {
+                // Cleanup local files safely
+                if (localVideoPath && fs.existsSync(localVideoPath)) fs.unlinkSync(localVideoPath);
+                if (localThumbnailPath && fs.existsSync(localThumbnailPath)) fs.unlinkSync(localThumbnailPath);
+            }
+            return { id: "sync-mock-job" };
         }
     };
 }
