@@ -4,18 +4,19 @@ import { Video } from "../models/video.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import fs from "fs";
 
-// If redisClient is available (REDIS_URL is configured), use it.
-// Otherwise, pass options with lazyConnect to prevent BullMQ from trying to connect to localhost:6379 on startup
-const connectionConfig = redisClient || {
-    host: "127.0.0.1",
-    port: 6379,
-    maxRetriesPerRequest: null,
-    enableOfflineQueue: false,
-    lazyConnect: true
-};
+export let uploadQueue;
 
-// Queue is exported so controllers can reference it without crashing
-export const uploadQueue = new Queue("video-uploads", { connection: connectionConfig });
+if (redisClient) {
+    uploadQueue = new Queue("video-uploads", { connection: redisClient });
+} else {
+    console.warn("⚠️ Redis is disabled. uploadQueue is running in mock mode.");
+    uploadQueue = {
+        add: async (name, data) => {
+            console.warn(`⚠️ Redis is disabled. Job '${name}' was not queued.`);
+            return { id: "mock-job-id" };
+        }
+    };
+}
 
 // ONLY instantiate the worker if NOT on Vercel and if a valid Redis client exists
 // Background workers cannot run in short-lived serverless functions.
@@ -65,7 +66,7 @@ if (!process.env.VERCEL && redisClient) {
                 }
             }
         },
-        { connection: connectionConfig }
+        { connection: redisClient }
     );
 
     uploadWorker.on("completed", (job) => {
