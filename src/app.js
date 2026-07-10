@@ -42,6 +42,9 @@ import playlistRouter from "./routes/playlist.routes.js"
 import dashboardRouter from "./routes/dashboard.routes.js"
 
 //routes declaration
+app.get("/", (req, res) => {
+    res.status(200).json({ message: "Video Upload Service Backend is running smoothly." });
+});
 app.use("/api/v1/healthcheck", healthcheckRouter)
 app.use("/api/v1/users", userRouter)
 app.use("/api/v1/tweets", tweetRouter)
@@ -53,6 +56,11 @@ app.use("/api/v1/playlist", playlistRouter)
 app.use("/api/v1/dashboard", dashboardRouter)
 
 // http://localhost:8000/api/v1/users/register
+
+// Catch-all route to prevent Vercel crashes on unknown endpoints
+app.use((req, res, next) => {
+    res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found` });
+});
 
 // Global Error Handler
 app.use((err, req, res, next) => {
