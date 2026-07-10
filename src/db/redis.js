@@ -59,4 +59,4 @@ const redis = {
     }
 };
 
-export { redis };
+export { redis, redisClient };
