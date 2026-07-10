@@ -1,7 +1,7 @@
-import { rateLimit } from "express-rate-limit";
-import RedisStore from "rate-limit-redis";
-import { redis } from "../db/redis.js";
+// Rate limiter middleware
+// Currently disabled — using passthrough for both Vercel and local dev.
+// When re-enabling, use express-rate-limit with RedisStore for local,
+// and in-memory store for Vercel.
 
-// TODO: Restore rate limiting before production deployment
 export const globalLimiter = (req, res, next) => next();
 export const authLimiter = (req, res, next) => next();

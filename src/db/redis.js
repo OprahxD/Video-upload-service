@@ -1,25 +1,35 @@
-import { Redis } from "ioredis";
-
 let redisClient = null;
 
-if (process.env.REDIS_URL) {
-    redisClient = new Redis(process.env.REDIS_URL, {
-        maxRetriesPerRequest: null, // Required by BullMQ
-        enableOfflineQueue: false, // Don't queue commands when offline (fail fast)
-        connectTimeout: 5000,      // Timeout connection attempts in 5 seconds
-    });
+const isVercel = !!process.env.VERCEL;
 
-    redisClient.on("connect", () => {
-        console.log("☁️ Successfully connected to Redis!");
-    });
+if (!isVercel && process.env.REDIS_URL) {
+    // Only import ioredis on non-Vercel environments to prevent serverless crashes
+    try {
+        const { Redis } = await import("ioredis");
+        redisClient = new Redis(process.env.REDIS_URL, {
+            maxRetriesPerRequest: null, // Required by BullMQ
+            enableOfflineQueue: false,  // Don't queue commands when offline (fail fast)
+            connectTimeout: 5000,       // Timeout connection attempts in 5 seconds
+        });
 
-    redisClient.on("error", (err) => {
-        console.error("❌ Redis connection failed:", err.message);
-    });
+        redisClient.on("connect", () => {
+            console.log("☁️ Successfully connected to Redis!");
+        });
+
+        redisClient.on("error", (err) => {
+            console.error("❌ Redis connection failed:", err.message);
+        });
+    } catch (err) {
+        console.error("⚠️ Failed to initialize Redis:", err.message);
+        redisClient = null;
+    }
+} else if (isVercel) {
+    console.warn("⚠️ Vercel detected — Redis/ioredis disabled for serverless compatibility.");
 } else {
     console.warn("⚠️ REDIS_URL is not defined in .env - Redis features will be disabled.");
 }
 
+// Safe Redis wrapper — all operations gracefully degrade to no-ops when Redis is unavailable
 const redis = {
     get: async (key) => {
         try {
