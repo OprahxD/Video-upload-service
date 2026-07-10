@@ -6,12 +6,17 @@ import { globalLimiter } from "./middlewares/rateLimiter.middleware.js"
 const app = express()
 
 app.use(cors({
-    origin: process.env.CORS_ORIGIN === '*' ? '*' : (origin, callback) => {
-        const envOrigin = process.env.CORS_ORIGIN?.replace(/\/$/, ''); // Remove accidental trailing slashes
-        if (!origin || origin === envOrigin || origin.startsWith('http://localhost') || (origin && origin.includes('vercel.app'))) {
-            callback(null, origin); // Dynamically reflect allowed origin back
+    origin: (origin, callback) => {
+        // In development, allow all origins (including localhost, 127.0.0.1, etc.)
+        if (process.env.NODE_ENV !== "production") {
+            callback(null, true);
         } else {
-            callback(new Error('Not allowed by CORS'));
+            const envOrigin = process.env.CORS_ORIGIN?.replace(/\/$/, ''); // Strip trailing slashes
+            if (!origin || origin === envOrigin || origin.includes('vercel.app')) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
         }
     },
     credentials: true
